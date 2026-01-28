@@ -8,11 +8,11 @@ This repository contains the HRMS monorepo: Backend (`.NET 8`), Frontend (React/
 
 - PR Pre-commit Checks: 
 
-[![PR Pre-commit Checks](https://github.com/OWNER/REPO/actions/workflows/pr-precommit-checks.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/pr-precommit-checks.yml)
+[![PR Pre-commit Checks](https://github.com/hr-shaileshkumar/uabindia-hrms/actions/workflows/pr-precommit-checks.yml/badge.svg)](https://github.com/hr-shaileshkumar/uabindia-hrms/actions/workflows/pr-precommit-checks.yml)
 
 - CI (build & test):
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/hr-shaileshkumar/uabindia-hrms/actions/workflows/ci.yml/badge.svg)](https://github.com/hr-shaileshkumar/uabindia-hrms/actions/workflows/ci.yml)
 
 ## How to update the badges automatically
 
@@ -30,9 +30,10 @@ This repository contains the HRMS monorepo: Backend (`.NET 8`), Frontend (React/
 	./scripts/update-readme-badges.sh
 	```
 
-	The script will detect `remote.origin.url`, extract `owner/repo` and replace `OWNER/REPO` in `README.md` and `Backend/README.md`.
+	The script will detect `remote.origin.url`, extract `hr-shaileshkumar/uabindia-hrms` and replace `hr-shaileshkumar/uabindia-hrms` in `README.md` and `Backend/README.md`.
 
 ## Quick links
 
 - Backend README: [Backend/README.md](Backend/README.md)
 - Migration scripts: [Backend/migrations_scripts/README.md](Backend/migrations_scripts/README.md)
+
