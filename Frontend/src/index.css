@@ -9,4 +9,24 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg);
+  color: var(--text-primary);
+}
+
+:root {
+  --primary: #0F766E;
+  --primary-hover: #115E59;
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+  --bg: #F1F5F9; /* page background */
+  --surface: #FFFFFF; /* card */
+  --text-primary: #0F172A; /* heading */
+  --text-secondary: #334155; /* label */
+  --helper: #64748B;
+  --divider: #E2E8F0; /* card border */
+  --input-border: #CBD5E1;
+  --input-placeholder: #94A3B8;
 }

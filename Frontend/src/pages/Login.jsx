@@ -1,589 +1,122 @@
-import { useState, useEffect } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Swal from 'sweetalert2'
+import { useLoginMutation } from '../services/authApi'
 import logo from '../assets/logo.png'
 
 const Login = () => {
-  const [loginType, setLoginType] = useState('department') // department | mvu
-  const [mobileNumber, setMobileNumber] = useState('')
-  const [otpCode, setOtpCode] = useState('')
-  const [step, setStep] = useState(1) // 1: Enter mobile, 2: Enter OTP
-  const [adminMode, setAdminMode] = useState('login') // login | change | reset
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(true)
+  const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [resetMobile, setResetMobile] = useState('')
-  const [resetOtp, setResetOtp] = useState('')
-  const [resetStep, setResetStep] = useState(1)
-  const { generateOtp, verifyOtp, loginWithPassword, changePassword, resetPassword } = useAuth()
+  const [error, setError] = useState('')
+  const [login, { isLoading }] = useLoginMutation()
   const navigate = useNavigate()
 
-  useEffect(() => {
-    const savedUserId = localStorage.getItem('rememberedUserId')
-    const savedPassword = localStorage.getItem('rememberedPassword')
-    if (savedUserId) {
-      setUserId(savedUserId)
-      setRememberMe(true)
-    }
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!rememberMe) {
-      return
-    }
-
-    if (userId) {
-      localStorage.setItem('rememberedUserId', userId)
-    }
-
-    if (password) {
-      localStorage.setItem('rememberedPassword', password)
-    }
-  }, [rememberMe, userId, password])
-
-  const handleGenerateOTP = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    if (mobileNumber.length !== 10 || !/^\d+$/.test(mobileNumber)) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid Mobile Number',
-        text: 'Please enter a valid 10-digit mobile number'
-      })
-      return
-    }
-
-    try {
-      const response = await generateOtp(mobileNumber)
-
-      if (response.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'OTP Sent',
-          text: `OTP: ${response.otpCode} (Development Mode)`,
-          timer: 5000
-        })
-        setStep(2)
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: response.message
-        })
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to generate OTP'
-      })
-    }
-  }
-
-  const handleVerifyOTP = async (e) => {
-    e.preventDefault()
-
-    try {
-      const result = await verifyOtp(mobileNumber, otpCode)
-
-      if (result.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Login Successful',
-          timer: 1500,
-          showConfirmButton: false
-        })
-        navigate('/')
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Login Failed',
-        text: error.response?.data?.message || 'Invalid OTP'
-      })
-    }
-  }
-
-  const handlePasswordLogin = async (e) => {
-    e.preventDefault()
-
+    setError('')
     if (!userId || !password) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Missing Credentials',
-        text: 'Please enter user ID and password'
-      })
+      setError('Please enter your user ID and password.')
       return
     }
 
     try {
-      const result = await loginWithPassword(userId, password)
-
-      if (result.success) {
-        if (rememberMe) {
-          localStorage.setItem('rememberedUserId', userId)
-          localStorage.setItem('rememberedPassword', password)
-        } else {
-          localStorage.removeItem('rememberedUserId')
-          localStorage.removeItem('rememberedPassword')
-        }
-        Swal.fire({
-          icon: 'success',
-          title: 'Login Successful',
-          timer: 1500,
-          showConfirmButton: false
-        })
+      const res = await login({ userId, password }).unwrap()
+      // expected backend: { accessToken, refreshToken, user }
+      const { accessToken, refreshToken, user } = res
+      if (accessToken) {
+        localStorage.setItem('token', accessToken)
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+        localStorage.setItem('user', JSON.stringify(user || {}))
+        if (rememberMe) localStorage.setItem('rememberedUserId', userId)
+        else localStorage.removeItem('rememberedUserId')
         navigate('/')
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Login Failed',
-        text: error.response?.data?.message || error.message || 'Invalid credentials'
-      })
-    }
-  }
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault()
-
-    if (!userId || !currentPassword || !newPassword) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Missing Details',
-        text: 'Please fill all fields to change password'
-      })
-      return
-    }
-
-    try {
-      const response = await changePassword(userId, currentPassword, newPassword)
-      if (response.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Password Updated',
-          text: response.message
-        })
-        setAdminMode('login')
-        setCurrentPassword('')
-        setNewPassword('')
       } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: response.message
-        })
+        setError(res.message || 'Login failed')
       }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to change password'
-      })
-    }
-  }
-
-  const handleSendResetOtp = async () => {
-    if (!userId || !resetMobile) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Missing Details',
-        text: 'Enter user ID and mobile number'
-      })
-      return
-    }
-
-  if (resetMobile.length !== 10 || !/^\d+$/.test(resetMobile)) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid Mobile Number',
-        text: 'Please enter a valid 10-digit mobile number'
-      })
-      return
-    }
-
-    try {
-      const response = await generateOtp(resetMobile)
-      if (response.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'OTP Sent',
-          text: `OTP: ${response.otpCode} (Development Mode)`
-        })
-        setResetStep(2)
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: response.message
-        })
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to generate OTP'
-      })
-    }
-  }
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault()
-
-    if (!userId || !resetMobile || !resetOtp || !newPassword) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Missing Details',
-        text: 'Please fill all fields to reset password'
-      })
-      return
-    }
-
-    try {
-      const response = await resetPassword(userId, resetMobile, resetOtp, newPassword)
-      if (response.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Password Reset',
-          text: response.message
-        })
-        setAdminMode('login')
-        setResetStep(1)
-        setResetOtp('')
-        setResetMobile('')
-        setNewPassword('')
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: response.message
-        })
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Failed to reset password'
-      })
-    }
-  }
-
-  const handleRememberToggle = () => {
-    const nextValue = !rememberMe
-    setRememberMe(nextValue)
-    if (!nextValue) {
-      localStorage.removeItem('rememberedUserId')
-      localStorage.removeItem('rememberedPassword')
-    } else {
-      if (userId) {
-        localStorage.setItem('rememberedUserId', userId)
-      }
-      if (password) {
-        localStorage.setItem('rememberedPassword', password)
-      }
+    } catch (err) {
+      setError(err?.data?.message || err?.message || 'Login failed')
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-green-50 px-4 py-8">
-      <div className="relative w-full max-w-lg">
-  <div className="absolute inset-0 rounded-3xl bg-gradient-to-b from-green-50 via-white to-white" aria-hidden="true" />
-
-  <div className="relative bg-white border border-green-100 shadow-[0_24px_60px_-35px_rgba(15,23,42,0.35)] rounded-3xl p-6 sm:p-8">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-gradient-to-b from-slate-100 to-slate-200">
+      <div className="w-full max-w-md">
+        <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-8">
           <div className="text-center mb-6">
-            <div className="mx-auto mb-3 h-16 w-28 sm:h-16 sm:w-32 md:h-20 md:w-36 flex items-center justify-center rounded-xl bg-white">
-              <img
-                src={logo}
-                alt="UABIndia Hrms"
-                className="h-12 w-20 sm:h-12 sm:w-24 md:h-16 md:w-28 object-contain"
+            <img src={logo} alt="UabIndia Hrms" className="mx-auto h-14 w-auto object-contain mb-4" />
+            <h1 className="text-2xl font-semibold text-slate-900 text-center">UabIndia HRMS</h1>
+            <p className="text-sm text-slate-600 text-center mt-1">Enterprise Human Resource Management System</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4" aria-label="login form">
+            <div>
+              <label htmlFor="login-userid" className="block text-sm font-medium text-slate-700 mb-1">User ID / Email / Mobile</label>
+              <input
+                id="login-userid"
+                name="userId"
+                type="text"
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                placeholder="Enter your user ID, email or mobile"
+                autoComplete="username"
               />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-green-600 mb-1 leading-tight">UABIndia Hrms</h1>
-            <p className="text-gray-600 text-sm sm:text-base">
-              {loginType === 'admin' && 'Admin Dashboard'}
-              {loginType === 'department' && 'Admin / Department Head / Manager Login'}
-              {loginType === 'mvu' && 'MVU Staff Login'}
-            </p>
-          </div>
 
-          <div className="grid grid-cols-2 gap-2 mb-5 text-sm font-semibold">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginType('department')
-                setAdminMode('login')
-                setStep(1)
-              }}
-              className={`rounded-xl border px-3 py-2 transition ${loginType === 'department' ? 'bg-green-600 text-white border-green-600 shadow-md shadow-green-200' : 'bg-white text-gray-700 border-gray-200 hover:border-green-300 hover:text-green-700'}`}
-            >
-              Department
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginType('mvu')
-                setStep(1)
-              }}
-              className={`rounded-xl border px-3 py-2 transition ${loginType === 'mvu' ? 'bg-green-600 text-white border-green-600 shadow-md shadow-green-200' : 'bg-white text-gray-700 border-gray-200 hover:border-green-300 hover:text-green-700'}`}
-            >
-              MVU
-            </button>
-          </div>
-
-          {loginType === 'mvu' ? (
-            step === 1 ? (
-              <form onSubmit={handleGenerateOTP} className="space-y-6">
-                <div>
-                  <label className="block text-gray-700 text-sm font-semibold mb-2">Mobile Number</label>
-                  <div className="relative">
-                    <input
-                      type="tel"
-                      value={mobileNumber}
-                      onChange={(e) => setMobileNumber(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter 10-digit mobile number"
-                      maxLength={10}
-                      required
-                    />
-                  </div>
-                </div>
+            <div>
+              <label htmlFor="login-password" className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <div className="relative">
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 pr-12"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
                 <button
-                  type="submit"
-                  className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 transition font-semibold shadow-lg shadow-green-200"
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute inset-y-0 right-3 flex items-center text-sm text-teal-700"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  Generate OTP
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
-                <p className="text-xs text-gray-500 text-center">OTP will be valid for a short time. Keep this page open.</p>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyOTP} className="space-y-6">
-                <div>
-                  <label className="block text-gray-700 text-sm font-semibold mb-2">Enter OTP</label>
-                  <input
-                    type="text"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm tracking-widest text-center"
-                    placeholder="6-digit code"
-                    maxLength={6}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-3 sm:space-y-0">
-                  <button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl hover:bg-gray-200 transition font-semibold border border-gray-200"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 transition font-semibold shadow-lg shadow-green-200"
-                  >
-                    Verify OTP
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 text-center">Didn’t receive it? Re-generate from previous step.</p>
-              </form>
-            )
-          ) : (
-            <div className="space-y-6">
-              {adminMode === 'login' && (
-                <form onSubmit={handlePasswordLogin} className="space-y-6">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">User ID</label>
-                    <input
-                      type="text"
-                      value={userId}
-                      onChange={(e) => setUserId(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter user ID"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">Password</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm pr-12"
-                        placeholder="Enter password"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-green-600 hover:text-green-700"
-                      >
-                        {showPassword ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={handleRememberToggle}
-                      className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    />
-                    Remember me
-                  </label>
-                  <button
-                    type="submit"
-                    className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 transition font-semibold shadow-lg shadow-green-200"
-                  >
-                    Login
-                  </button>
-                  <p className="text-xs text-gray-500 text-center">First time? Use reset password with OTP to set your password.</p>
-                </form>
-              )}
-
-              {adminMode === 'change' && (
-                <form onSubmit={handleChangePassword} className="space-y-6">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">User ID</label>
-                    <input
-                      type="text"
-                      value={userId}
-                      onChange={(e) => setUserId(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter user ID"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">Current Password</label>
-                    <input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter current password"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">New Password</label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter new password"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 transition font-semibold shadow-lg shadow-green-200"
-                  >
-                    Update Password
-                  </button>
-                </form>
-              )}
-
-              {adminMode === 'reset' && (
-                <form onSubmit={handleResetPassword} className="space-y-6">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">User ID</label>
-                    <input
-                      type="text"
-                      value={userId}
-                      onChange={(e) => setUserId(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter user ID"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-semibold mb-2">Mobile Number</label>
-                    <input
-                      type="tel"
-                      value={resetMobile}
-                      onChange={(e) => setResetMobile(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                      placeholder="Enter registered mobile number"
-                      maxLength={10}
-                      required
-                    />
-                  </div>
-
-                  {resetStep === 2 && (
-                    <>
-                      <div>
-                        <label className="block text-gray-700 text-sm font-semibold mb-2">OTP</label>
-                        <input
-                          type="text"
-                          value={resetOtp}
-                          onChange={(e) => setResetOtp(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm text-center tracking-widest"
-                          placeholder="Enter OTP"
-                          maxLength={6}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-gray-700 text-sm font-semibold mb-2">New Password</label>
-                        <input
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-sm"
-                          placeholder="Enter new password"
-                          required
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {resetStep === 1 ? (
-                    <button
-                      type="button"
-                      onClick={handleSendResetOtp}
-                      className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 transition font-semibold shadow-lg shadow-green-200"
-                    >
-                      Send OTP
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 transition font-semibold shadow-lg shadow-green-200"
-                    >
-                      Reset Password
-                    </button>
-                  )}
-                </form>
-              )}
-
-              <div className="flex flex-wrap justify-center gap-4 text-sm font-semibold text-green-700">
-                {['login', 'change', 'reset'].map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => {
-                      setAdminMode(mode)
-                      setResetStep(1)
-                    }}
-                    className={`transition hover:text-green-800 ${adminMode === mode ? 'underline' : 'text-green-700/80'}`}
-                  >
-                    {mode === 'login' && 'Login'}
-                    {mode === 'change' && 'Change Password'}
-                    {mode === 'reset' && 'Reset Password'}
-                  </button>
-                ))}
               </div>
+              <p className="text-xs text-slate-500 mt-2">This is a secure system. Unauthorized access is prohibited.</p>
             </div>
-          )}
+
+            <div className="flex items-center justify-between">
+              <label htmlFor="remember-me" className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  id="remember-me"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                Remember this device
+              </label>
+
+              <a href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">Forgot Password?</a>
+            </div>
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <button
+              type="submit"
+              className="w-full mt-6 bg-teal-700 text-white py-2.5 rounded-md font-medium hover:bg-teal-800 transition"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Signing in...' : 'Login'}
+            </button>
+          </form>
+
+          <p className="text-xs text-slate-600 text-center mt-5">© 2026 UabIndia HRMS. All rights reserved.</p>
         </div>
       </div>
     </div>
