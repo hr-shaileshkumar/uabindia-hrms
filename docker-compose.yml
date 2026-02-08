@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: hrms-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "YourSecurePassword123!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "YourSecurePassword123!" -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hrms-network
+
+  # HRMS API
+  api:
+    build:
+      context: ./Backend/src/UabIndia.Api
+      dockerfile: Dockerfile.prod
+    container_name: hrms-api
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=UabIndia_HRMS;User Id=sa;Password=YourSecurePassword123!;TrustServerCertificate=True;Encrypt=True;MultipleActiveResultSets=true"
+      Jwt__Key: "your-secure-jwt-key-minimum-64-characters-long-here"
+      Jwt__Issuer: "https://api.hrms.local"
+      Jwt__Audience: "hrms_clients"
+      Cors__AllowedOrigins: "http://localhost:3000,http://localhost:5173,https://hrms.local"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:5000"
+    ports:
+      - "5000:5000"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - hrms-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend (Optional - for local development)
+  frontend:
+    image: node:20-alpine
+    container_name: hrms-frontend
+    working_dir: /app
+    volumes:
+      - ./Frontend:/app
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: "http://api:5000"
+      NODE_ENV: "development"
+    command: npm run dev
+    networks:
+      - hrms-network
+
+volumes:
+  sqlserver_data:
+
+networks:
+  hrms-network:
+    driver: bridge

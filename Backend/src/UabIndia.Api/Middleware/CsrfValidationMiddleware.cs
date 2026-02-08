@@ -1,0 +1,61 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+
+namespace UabIndia.Api.Middleware
+{
+    public class CsrfValidationMiddleware
+    {
+        private readonly RequestDelegate _next;
+        private readonly ILogger<CsrfValidationMiddleware> _logger;
+
+        private static readonly string[] SafeMethods = { "GET", "HEAD", "OPTIONS" };
+        private static readonly string[] ExcludedPaths =
+        {
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/csrf-token",
+            "/health",
+            "/health/live",
+            "/health/ready"
+        };
+
+        public CsrfValidationMiddleware(RequestDelegate next, ILogger<CsrfValidationMiddleware> logger)
+        {
+            _next = next;
+            _logger = logger;
+        }
+
+        public async Task Invoke(HttpContext context)
+        {
+            var method = context.Request.Method;
+            if (SafeMethods.Contains(method, StringComparer.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
+            var path = context.Request.Path.Value ?? string.Empty;
+            if (ExcludedPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+            {
+                await _next(context);
+                return;
+            }
+
+            var csrfCookie = context.Request.Cookies["csrf_token"];
+            var csrfHeader = context.Request.Headers["X-CSRF-Token"].FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(csrfCookie) || string.IsNullOrWhiteSpace(csrfHeader) || !string.Equals(csrfCookie, csrfHeader, StringComparison.Ordinal))
+            {
+                _logger.LogWarning("CSRF validation failed for {Path}", path);
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new { error = "csrf_validation_failed" });
+                return;
+            }
+
+            await _next(context);
+        }
+    }
+}
